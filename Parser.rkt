@@ -9,27 +9,38 @@
   (lambda (varName env)
     (cond
       ((null? env) #f)
-      ((eq? (caar env) 'global) (resolve varName (list (cdar env))))
-      ((eq? (caar env) 'local) (resolve varName (cons (cdar env) (cdr env))))
-      ((eq? varName (caaar env)) (car (cdaar env)))
-      (else (resolve varName (list (cdar env)))))))
-
-(define build-scope
-  (lambda (lo-vars lo-vals)
+      ((eq? (caar env) 'global) (resolve-scope varName (cdar env)))
+      (else (let ((answer(resolve-scope varName (car env))))
+              (if (eq? answer #f)
+                  (resolve varName (cdr env))
+                  answer))))))
+                  
+     
+(define resolve-scope
+  (lambda (varName scope)
     (cond
-      ((null? lo-vals) '())
-      (else (cons (list (car lo-vars) (car lo-vals)) (build-scope (cdr lo-vars) (cdr lo-vals)))))))
+      ((null? scope) #f)
+      ((eq? varName (caar scope)) (cadar scope))
+      (else (resolve-scope varName (cdr scope))))))
+(define empty-scope '())
+
+
+(define extend-scope
+  (lambda (lo-vars lo-vals scope)
+    (cond
+      ((null? lo-vars) scope)
+      (else (extend-scope (cdr lo-vars)
+                        (cdr lo-vals)
+                        (cons (list (car lo-vars) (car lo-vals)) scope))))))
 
 (define extend-env
-  (lambda (lo-vars lo-vals env)
-    (cons (cons 'local (build-scope lo-vars lo-vals)) env)))
+  (lambda (scope env)
+    (cons scope env)))
 
-(define get-global-env
+(define pop-to-global
   (lambda (env)
-    (cond
-      ((null? env) '())
-      ((eq? (caar env) 'global) env)
-      (else (get-global-env (cdr env))))))
+    (if(eq? (caar env) 'global) env
+       (pop-to-global (cdr env)))))
 
 (define env-let-get-var-names
   (lambda (lst)
@@ -159,7 +170,8 @@
         
 (define run-parsed-function-code
   (lambda (parsed-no-code-function env)
-    (run-parsed-code (cadr (caddr parsed-no-code-function)) env)))
+   (let ((body (cadr (caddr parsed-no-code-function))))
+     (run-parsed-code body env))))
 
            
 (define run-parsed-code
@@ -168,7 +180,7 @@
       ((eq? (car parsed-no-code) 'num-lit-exp)
        (cadr parsed-no-code))
       ((eq? (car parsed-no-code) 'var-exp)
-       (resolve (cadr parsed-no-code) env ))
+       (resolve (cadr parsed-no-code) env))
       ((eq? (car parsed-no-code) 'let-exp)
        (let* ((var-2-lists (env-let-mapper (cadr parsed-no-code)))
               (new-env (extend-env (car var-2-lists) (cadr var-2-lists) env))
@@ -180,29 +192,28 @@
         (run-parsed-code (caddr parsed-no-code) env)
         (run-parsed-code (cadddr parsed-no-code) env)))
       ((eq? (car parsed-no-code) 'ask-exp)
-       (if (run-parsed-boolean-code (cadr parsed-no-code) env)  
+       (if (run-parsed-boolean-code (cadr parsed-no-code) env) 
            (run-parsed-code (caddr parsed-no-code) env)
            (run-parsed-code (cadddr parsed-no-code) env)))
       (else
          (run-parsed-function-code
         (cadr parsed-no-code)
         (extend-env
+         (extend-scope
          (cdr (cadr (cadr parsed-no-code)))
          (map (lambda (packet) (run-parsed-code (car packet) (cadr packet))) (map (lambda (x) (list x env)) (caddr parsed-no-code)))
-         (get-global-env (list env))))))))   
- ; this is where you burn off until you get to the most local scope
+         empty-scope)
+         (pop-to-global env)))))))
 
 
 ; ~~~~~~~~~~~~~~~~~
 ; ~~~~~ MAIN ~~~~~~
 ; ~~~~~~~~~~~~~~~~~
 
-(define env '(global (age 21) (a 7) (b 5) (c 23)))
-(define extended-env (extend-env '(a v) '(5 12) (get-global-env (list env))))
-extended-env
-;(resolve 'a (list env))
+(define env '(((a 17))(global (age 21) (a 7) (b 5) (c 23))))
+;(pop-to-global env)
 (define sample-no-code '(call (function (a) (call (function (r) a) a)) 5))
 ;sample-no-code
 (define parsed-no-code (no-parser sample-no-code))
-parsed-no-code
+;parsed-no-code
 (run-parsed-code parsed-no-code env)
