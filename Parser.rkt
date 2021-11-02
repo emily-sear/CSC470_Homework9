@@ -9,27 +9,20 @@
   (lambda (varName env)
     (cond
       ((null? env) #f)
-      ((eq? (car env) 'global) (resolve varName (cdr env)))
-      ((eq? varName (caar env)) (cadar env))
-      (else (resolve varName (cdr env))))))
+      ((eq? (caar env) 'global) (resolve varName (list (cdar env))))
+      ((eq? (caar env) 'local) (resolve varName (cons (cdar env) (cdr env))))
+      ((eq? varName (caaar env)) (car (cdaar env)))
+      (else (resolve varName (list (cdar env)))))))
 
 (define build-scope
   (lambda (lo-vars lo-vals)
     (cond
       ((null? lo-vals) '())
-      (else (append (list (car lo-vars) (car lo-vals)) (build-scope (cdr lo-vars) (cdr lo-vals)))))))
+      (else (cons (list (car lo-vars) (car lo-vals)) (build-scope (cdr lo-vars) (cdr lo-vals)))))))
 
 (define extend-env
   (lambda (lo-vars lo-vals env)
-    (cons (build-scope lo-vars lo-vals) env)))
-
-    ;(cond
-     ; ((null? lo-vars) env)
-      ;(else (extend-env (cdr lo-vars)
-       ;                 (cdr lo-vals)
-        ;                (cond
-         ;                 ((eq? (car env) 'global) (cons (list (list (car lo-vars) (car lo-vals))) env))
-          ;                (else (cons (append (list (car lo-vars) (car lo-vals) (car env))) env))))))))
+    (cons (cons 'local (build-scope lo-vars lo-vals)) env)))
 
 (define get-global-env
   (lambda (env)
@@ -175,7 +168,7 @@
       ((eq? (car parsed-no-code) 'num-lit-exp)
        (cadr parsed-no-code))
       ((eq? (car parsed-no-code) 'var-exp)
-       (resolve (cadr parsed-no-code) env))
+       (resolve (cadr parsed-no-code) env ))
       ((eq? (car parsed-no-code) 'let-exp)
        (let* ((var-2-lists (env-let-mapper (cadr parsed-no-code)))
               (new-env (extend-env (car var-2-lists) (cadr var-2-lists) env))
@@ -205,11 +198,11 @@
 ; ~~~~~~~~~~~~~~~~~
 
 (define env '(global (age 21) (a 7) (b 5) (c 23)))
-(define extended-env (extend-env '(a v) '(5 12) env))
-;extended-env
+(define extended-env (extend-env '(a v) '(5 12) (get-global-env (list env))))
+extended-env
+;(resolve 'a (list env))
 (define sample-no-code '(call (function (a) (call (function (r) a) a)) 5))
 ;sample-no-code
 (define parsed-no-code (no-parser sample-no-code))
 parsed-no-code
-;(resolve 'a env)
 (run-parsed-code parsed-no-code env)
